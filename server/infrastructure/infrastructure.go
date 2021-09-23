@@ -19,7 +19,7 @@ func loadEnvParameters() {
 
 func init() {
 	loadEnvParameters()
-	loadDriveService()
+	// loadDriveService()
 	loadAwsService()
 	loadDatabase()
 	loadRedis()

@@ -20,8 +20,8 @@ func main() {
 	}
 	s := grpc.NewServer()
 	pb.RegisterMediaServiceServer(s, service.GetServerGrpcStruct())
-	log.Printf("server listening at %v", lis.Addr())
+	log.Printf("grpc server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+		log.Fatalf("failed to grpc serve: %v", err)
 	}
 }

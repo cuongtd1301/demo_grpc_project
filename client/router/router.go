@@ -44,7 +44,7 @@ func Router() http.Handler {
 
 	r.Route("/api/v1", func(router chi.Router) {
 		// Public routes
-		router.Post("/media/image", mediaController.DownloadImage)
+		router.Post("/media", mediaController.ManageMedia)
 	})
 
 	return r

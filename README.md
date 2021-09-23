@@ -1,7 +1,7 @@
 ## Init go module before run
 go mod init demo-grpc
 
-## Run protoc
+## Generate protoc file
 protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative proto/media.proto
 
 ## Command run server

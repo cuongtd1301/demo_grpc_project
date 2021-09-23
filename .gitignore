@@ -3,3 +3,4 @@ go.sum
 *.json
 temp/*
 !.gitkeep
+docs/

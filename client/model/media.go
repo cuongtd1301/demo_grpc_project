@@ -1,5 +1,14 @@
 package model
 
+type MediaPayload struct {
+	Constructor string `json:"constructor"`
+	Bucket      string `json:"bucket"`
+	Key         string `json:"key"`
+}
+
+type MediaResopnse struct {
+}
+
 type FileUploadInfo struct {
 	Id          int    `json:"id"`
 	FileId      int64  `json:"fileId"`
