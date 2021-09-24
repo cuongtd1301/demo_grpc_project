@@ -1,0 +1,21 @@
+[databases]
+username = "root"
+password = "0000"
+protocol = "tcp"
+ip       = "127.0.0.1"
+dbPort   = "3306"
+dbName   = "demo"
+
+[aws] 
+region = "us-east-2"
+bucket = "demo-storage-file"
+
+[grpc]
+host = "localhost"
+port = "50001"
+
+[redis]
+host = "localhost"
+port = "6379"
+password = ""
+db = 0

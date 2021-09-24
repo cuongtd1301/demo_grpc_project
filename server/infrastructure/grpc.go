@@ -1,10 +1,15 @@
 package infrastructure
 
+import "fmt"
+
 const (
-	grpcHost = "localhost"
-	grpcPort = ":50001"
+// grpcHost = "localhost"
+// grpcPort = ":50001"
 )
 
 func GetGrpcAddress() string {
-	return grpcHost + grpcPort
+	host := config.Grpc.Host
+	port := config.Grpc.Port
+
+	return fmt.Sprintf("%s:%s", host, port)
 }

@@ -10,12 +10,12 @@ import (
 )
 
 var (
-	username = "root"
-	password = "0000"
-	protocol = "tcp"
-	ip       = "127.0.0.1"
-	dbPort   = "3306"
-	dbName   = "demo"
+	// username = "root"
+	// password = "0000"
+	// protocol = "tcp"
+	// ip       = "127.0.0.1"
+	// dbPort   = "3306"
+	// dbName   = "demo"
 
 	db *sqlx.DB
 )
@@ -35,6 +35,12 @@ var schema = `CREATE TABLE IF NOT EXISTS file_upload_infos (
 
 func loadDatabase() {
 	var err error
+	username := config.Databases.Username
+	password := config.Databases.Password
+	protocol := config.Databases.Protocol
+	ip := config.Databases.Ip
+	dbPort := config.Databases.DbPort
+	dbName := config.Databases.DbName
 	connString := fmt.Sprintf("%v:%v@%v(%v:%v)/%v?parseTime=true", username, password, protocol, ip, dbPort, dbName)
 	db, err = sqlx.Connect("mysql", connString)
 	if err != nil {
