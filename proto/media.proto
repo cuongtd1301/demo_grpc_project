@@ -35,21 +35,28 @@ message FileUploadUrl {
 message LargeFileInput {
     string bucket = 1;
     string key = 2;
-    int64 part_size = 3;
+    int64 content_length = 3;
+    int64 part_size = 4;
 }
 
 message LargeFileResponse {
+    string upload_id = 1;
     message  PartFile {
         string url = 1;
-        int32 part_num = 2;
+        int64 part_number = 2;
     }
-    repeated PartFile part_file = 1;
+    repeated PartFile part_file = 2;
 }
 
 message UploadCompleteInput {
     string bucket = 1;
     string key = 2;
     string upload_id = 3;
+    message CompletedPart {
+        string e_tag = 1;
+        int64 part_number = 2;
+    }
+    repeated CompletedPart completed_part = 4;
 }
 
 message UploadCompleteResponse {

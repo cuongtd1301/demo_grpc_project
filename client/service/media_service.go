@@ -32,15 +32,15 @@ type mediaService struct {
 
 type MediaService interface {
 	ManageMedia(payload model.MediaPayload, byteData []byte, header *multipart.FileHeader) (*model.MediaResopnse, error)
-	DownloadImage(ctx context.Context, url string) (*model.FileUploadInfo, error)
+	// DownloadImage(ctx context.Context, url string) (*model.FileUploadInfo, error)
 }
 
 func (s *mediaService) ManageMedia(payload model.MediaPayload, byteData []byte, header *multipart.FileHeader) (*model.MediaResopnse, error) {
 	clientConn, err := infrastructure.GrpcClientConnect()
-	defer clientConn.Close()
 	if err != nil {
 		return nil, err
 	}
+	defer clientConn.Close()
 	c := pb.NewMediaServiceClient(clientConn)
 	switch payload.Constructor {
 	case "upload":
@@ -61,22 +61,32 @@ func UploadMedia(c pb.MediaServiceClient, payload model.MediaPayload, byteData [
 }
 
 func DownloadMedia(c pb.MediaServiceClient, payload model.MediaPayload) (*model.MediaResopnse, error) {
-	contentLength, err := c.GetHeadFile(payload.Bucket, payload.Key)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
+	out, err := c.GetHeadFile(ctx, &pb.FileInput{
+		Bucket: payload.Bucket,
+		Key:    payload.Key,
+	})
 	if err != nil {
 		return nil, err
 	}
-	if contentLength < LARGE_FILE_SIZE {
+	if out.GetContentLength() < LARGE_FILE_SIZE {
 		return DownloadNormalFile(c, payload)
 	}
 	return DownloadLargeFile(c, payload)
 }
 
 func DownloadNormalFile(c pb.MediaServiceClient, payload model.MediaPayload) (*model.MediaResopnse, error) {
-	url := c.GetPresignedUrlDownloadFile(payload.Bucket, payload.Key)
-
+	out, err := c.GetPresignedUrlDownloadFile(context.TODO(), &pb.FileInput{
+		Bucket: payload.Bucket,
+		Key:    payload.Key,
+	})
+	if err != nil {
+		return nil, err
+	}
 	ctxRequest, cancelRequest := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancelRequest()
-	req, err := http.NewRequestWithContext(ctxRequest, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctxRequest, http.MethodGet, out.GetUrl(), nil)
 	if err != nil {
 		fmt.Println("error creating request")
 		return nil, err
@@ -94,23 +104,41 @@ func DownloadNormalFile(c pb.MediaServiceClient, payload model.MediaPayload) (*m
 		fmt.Println("failed reading")
 	}
 	log.Println(len(byteData))
-	return &model.MediaResopnse{}, nil
+	return &model.MediaResopnse{
+		ByteData: byteData,
+		FileName: payload.Key,
+	}, nil
 }
 
 func DownloadLargeFile(c pb.MediaServiceClient, payload model.MediaPayload) (*model.MediaResopnse, error) {
-	listUrl := c.GetPresignedUrlDownloadPartFile(payload.Bucket, payload.Key, PART_SIZE)
-
+	out, err := c.GetPresignedUrlDownloadPartFile(context.TODO(), &pb.LargeFileInput{
+		Bucket:        "",
+		Key:           "",
+		ContentLength: 0,
+		PartSize:      0,
+	})
+	if err != nil {
+		return nil, err
+	}
+	//
 	completedPartChannel := make(chan *DownloadPartResponse)
 	defer close(completedPartChannel)
-
-	for part := range listUrl {
-		go downloadPartFileUrl(part, completedPartChannel)
+	listDownloadPart := []DownloadPartPayload{}
+	listPartFile := out.GetPartFile()
+	for i := range listPartFile {
+		listDownloadPart = append(listDownloadPart, DownloadPartPayload{
+			Url:     listPartFile[i].GetUrl(),
+			PartNum: int(listPartFile[i].GetPartNumber()),
+		})
+	}
+	for i := range listDownloadPart {
+		go downloadPartFileUrl(listDownloadPart[i], completedPartChannel)
 	}
 	partRes := []DownloadPartResponse{}
-	for i := 0; i < len(listUrl); i++ {
+	for i := 0; i < len(listDownloadPart); i++ {
 		tmp := <-completedPartChannel
 		if tmp == nil {
-			return nil, errors.New("About download because some parts get error\n")
+			return nil, errors.New("about download because some parts get error")
 		}
 		partRes = append(partRes, *tmp)
 	}
@@ -122,9 +150,10 @@ func DownloadLargeFile(c pb.MediaServiceClient, payload model.MediaPayload) (*mo
 		dataByte = append(dataByte, partRes[i].ByteData...)
 	}
 
-	dataByte
-
-	return &model.MediaResopnse{}, nil
+	return &model.MediaResopnse{
+		ByteData: dataByte,
+		FileName: payload.Key,
+	}, nil
 }
 
 func downloadPartFileUrl(payload DownloadPartPayload, completedParts chan *DownloadPartResponse) {
@@ -134,7 +163,7 @@ func downloadPartFileUrl(payload DownloadPartPayload, completedParts chan *Downl
 		defer cancelRequest()
 		req, err1 := http.NewRequestWithContext(ctxRequest, http.MethodGet, payload.Url, nil)
 		resp, err2 := http.DefaultClient.Do(req)
-		defer resp.Body.Close()
+		// defer resp.Body.Close()
 		err := utils.FirstNonNil(err1, err2)
 		// Download failed
 		if err != nil {
@@ -162,15 +191,21 @@ func downloadPartFileUrl(payload DownloadPartPayload, completedParts chan *Downl
 			return
 		}
 	}
-	return
+	// return
 }
 
 func UploadNormalFile(c pb.MediaServiceClient, payload model.MediaPayload, byteData []byte, header *multipart.FileHeader) (*model.MediaResopnse, error) {
-	url := c.GetPresignedUrlUploadFile(payload.Bucket, payload.Key)
+	out, err := c.GetPresignedUrlUploadFile(context.TODO(), &pb.FileInput{
+		Bucket: payload.Bucket,
+		Key:    payload.Key,
+	})
+	if err != nil {
+		return nil, err
+	}
 	r := bytes.NewReader(byteData)
 	ctxRequest, cancelRequest := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancelRequest()
-	req, err := http.NewRequestWithContext(ctxRequest, http.MethodPut, url, r)
+	req, err := http.NewRequestWithContext(ctxRequest, http.MethodPut, out.GetUrl(), r)
 	if err != nil {
 		fmt.Println("error creating request")
 		return nil, err
@@ -187,13 +222,32 @@ func UploadNormalFile(c pb.MediaServiceClient, payload model.MediaPayload, byteD
 }
 
 func UploadLargeFile(c pb.MediaServiceClient, payload model.MediaPayload, byteData []byte, header *multipart.FileHeader) (*model.MediaResopnse, error) {
-	// ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
-	// defer cancel()
-	uploadId, listPresignedUrlPart, err := c.GetPresignedUrlUploadLargeFile(payload.Bucket, payload.Key, len(byteData), PART_SIZE)
+	//payload.Bucket, payload.Key, len(byteData), PART_SIZE
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
+	out, err := c.GetPresignedUrlUploadLargeFile(ctx, &pb.LargeFileInput{
+		Bucket:        payload.Bucket,
+		Key:           payload.Key,
+		ContentLength: header.Size,
+		PartSize:      PART_SIZE,
+	})
 	if err != nil {
 		return nil, err
 	}
+	uploadId := out.GetUploadId()
 	// multipart upload
+	listPartFile := out.GetPartFile()
+	listPresignedUrlPart := []PresignedUrlPart{}
+	for i := range listPartFile {
+		listPresignedUrlPart = append(listPresignedUrlPart, PresignedUrlPart{
+			UploadId:   uploadId,
+			PartNumber: int(listPartFile[i].GetPartNumber()),
+			Url:        listPartFile[i].GetUrl(),
+		})
+	}
+	sort.Slice(listPresignedUrlPart, func(i, j int) bool {
+		return listPresignedUrlPart[i].PartNumber < listPresignedUrlPart[j].PartNumber
+	})
 	var start, currentSize int
 	var remaining = len(byteData)
 	var partNum = 1
@@ -215,7 +269,7 @@ func UploadLargeFile(c pb.MediaServiceClient, payload model.MediaPayload, byteDa
 	// append completedPart
 	completedAllPart := true
 	listCompletedParts := []*s3.CompletedPart{}
-	listInfoPart := []PresignedUrlPart{}
+	// listInfoPart := []PresignedUrlPart{}
 	for i := 0; i < partNum-1; i++ {
 		tmp := <-completedPartChannel
 		if tmp == nil || !tmp.Success {
@@ -223,7 +277,7 @@ func UploadLargeFile(c pb.MediaServiceClient, payload model.MediaPayload, byteDa
 			completedAllPart = false
 			// return errors.New("About upload because some parts get error\n")
 		}
-		listInfoPart = append(listInfoPart, *tmp)
+		// listInfoPart = append(listInfoPart, *tmp)
 		listCompletedParts = append(listCompletedParts, &s3.CompletedPart{
 			ETag:       aws.String(tmp.ETag),
 			PartNumber: aws.Int64(int64(tmp.PartNumber)),
@@ -240,11 +294,34 @@ func UploadLargeFile(c pb.MediaServiceClient, payload model.MediaPayload, byteDa
 	// }
 	// complete multipart upload
 	if !completedAllPart {
-		c.AbortMultipartUpload(payload.Bucket, payload.Key, uploadId)
-		err = errors.New("About upload because some parts get error\n")
+		ctxAbort, cancelAbort := context.WithTimeout(context.Background(), 1*time.Minute)
+		defer cancelAbort()
+		c.AbortMultipartUpload(ctxAbort, &pb.UploadCompleteInput{
+			Bucket:   payload.Bucket,
+			Key:      payload.Key,
+			UploadId: uploadId,
+		})
+		err = errors.New("about upload because some parts get error")
 		return nil, err
 	}
-	_, err = c.CompleteMultipartUpload(payload.Bucket, payload.Key, uploadId, listCompletedParts)
+	// CompletePart upload
+	uploadCompleteInput := &pb.UploadCompleteInput{
+		Bucket:   payload.Bucket,
+		Key:      payload.Key,
+		UploadId: uploadId,
+	}
+	for i := range listCompletedParts {
+		uploadCompleteInput.CompletedPart = append(uploadCompleteInput.CompletedPart, &pb.UploadCompleteInput_CompletedPart{
+			ETag:       *listCompletedParts[i].ETag,
+			PartNumber: *listCompletedParts[i].PartNumber,
+		})
+	}
+	sort.Slice(uploadCompleteInput.CompletedPart, func(i, j int) bool {
+		return uploadCompleteInput.CompletedPart[i].GetPartNumber() < uploadCompleteInput.CompletedPart[j].GetPartNumber()
+	})
+	ctxCompleted, cancelCompleted := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancelCompleted()
+	_, err = c.CompleteMultipartUpload(ctxCompleted, uploadCompleteInput)
 	if err != nil {
 		return nil, err
 	}
@@ -293,31 +370,6 @@ func uploadPartFileUsingPresignedUrl(part PresignedUrlPart, fileBytes []byte, co
 	return
 }
 
-func (s *mediaService) DownloadImage(ctx context.Context, url string) (*model.FileUploadInfo, error) {
-	clientConn, err := infrastructure.GrpcClientConnect()
-	defer clientConn.Close()
-	if err != nil {
-		return nil, err
-	}
-	c := pb.NewMediaServiceClient(clientConn)
-	r, err := c.DownloadImage(ctx, &pb.ImageInfo{
-		Url: url,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &model.FileUploadInfo{
-		Id:          int(r.GetId()),
-		FileId:      r.GetFileId(),
-		FileSize:    r.GetFileSize(),
-		FileName:    r.GetFileName(),
-		Ext:         r.GetExt(),
-		MimeType:    r.GetMimeType(),
-		CreatedTime: r.GetCreatedTime(),
-		UpdateTime:  r.GetUpdatedTime(),
-	}, nil
-}
-
 func NewMediaService() MediaService {
 	return &mediaService{}
 }
@@ -340,3 +392,28 @@ type DownloadPartResponse struct {
 	ByteData []byte
 	PartNum  int
 }
+
+// func (s *mediaService) DownloadImage(ctx context.Context, url string) (*model.FileUploadInfo, error) {
+// 	clientConn, err := infrastructure.GrpcClientConnect()
+// 	defer clientConn.Close()
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	c := pb.NewMediaServiceClient(clientConn)
+// 	r, err := c.DownloadImage(ctx, &pb.ImageInfo{
+// 		Url: url,
+// 	})
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return &model.FileUploadInfo{
+// 		Id:          int(r.GetId()),
+// 		FileId:      r.GetFileId(),
+// 		FileSize:    r.GetFileSize(),
+// 		FileName:    r.GetFileName(),
+// 		Ext:         r.GetExt(),
+// 		MimeType:    r.GetMimeType(),
+// 		CreatedTime: r.GetCreatedTime(),
+// 		UpdateTime:  r.GetUpdatedTime(),
+// 	}, nil
+// }

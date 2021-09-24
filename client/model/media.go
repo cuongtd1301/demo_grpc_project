@@ -7,6 +7,8 @@ type MediaPayload struct {
 }
 
 type MediaResopnse struct {
+	ByteData []byte `json:"byteData"`
+	FileName string `json:"fileName"`
 }
 
 type FileUploadInfo struct {

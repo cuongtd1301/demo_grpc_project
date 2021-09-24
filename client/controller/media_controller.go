@@ -4,6 +4,7 @@ import (
 	"demo-grpc/client/model"
 	"demo-grpc/client/service"
 	"io/ioutil"
+	"mime/multipart"
 	"net/http"
 
 	"github.com/go-chi/render"
@@ -27,31 +28,37 @@ func (c *mediaController) ManageMedia(w http.ResponseWriter, r *http.Request) {
 	data.Bucket = query.Get("bucket")
 	data.Key = query.Get("key")
 
-	r.ParseMultipartForm(25 << 20)
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		res := &model.Response{
-			Data:    nil,
-			Message: "Error retrieving the file:" + err.Error(),
-			Success: false,
+	byteFile := []byte{}
+	var header *multipart.FileHeader
+	if data.Constructor == "upload" {
+		r.ParseMultipartForm(25 << 20)
+		file, tmpHeader, err := r.FormFile("file")
+		if err != nil {
+			res := &model.Response{
+				Data:    nil,
+				Message: "Error retrieving the file:" + err.Error(),
+				Success: false,
+			}
+			render.JSON(w, r, res)
+			return
 		}
-		render.JSON(w, r, res)
-		return
-	}
-	defer file.Close()
+		defer file.Close()
 
-	byteFile, err := ioutil.ReadAll(file)
-	if err != nil {
-		res := &model.Response{
-			Data:    nil,
-			Message: "Error convert the file to bytes" + err.Error(),
-			Success: false,
+		byteFile, err = ioutil.ReadAll(file)
+		if err != nil {
+			res := &model.Response{
+				Data:    nil,
+				Message: "Error convert the file to bytes" + err.Error(),
+				Success: false,
+			}
+			render.JSON(w, r, res)
+			return
 		}
-		render.JSON(w, r, res)
-		return
+		header = tmpHeader
 	}
 
 	tmp, err := c.mediaService.ManageMedia(data, byteFile, header)
+
 	if err != nil {
 		res = &model.Response{
 			Data:    nil,

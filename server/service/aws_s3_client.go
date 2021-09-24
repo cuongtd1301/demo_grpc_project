@@ -47,14 +47,14 @@ func GetPresignedUrlUploadLargeFile(bucketname, filename string, sizeFile int64,
 		fmt.Println("Failed to CreateMultipartUpload:", err)
 		return "", nil, err
 	}
-	var start, currentSize int
-	var remaining = int(sizeFile)
+	var start, currentSize int64
+	var remaining = sizeFile
 	var partNum = 1
-	for start = 0; remaining != 0; start += partSize {
-		if remaining < partSize*2 {
+	for start = 0; remaining != 0; start += int64(partSize) {
+		if remaining < int64(partSize)*2 {
 			currentSize = remaining
 		} else {
-			currentSize = partSize
+			currentSize = int64(partSize)
 		}
 
 		r1, _ := svc.UploadPartRequest(&s3.UploadPartInput{
@@ -84,9 +84,9 @@ func GetPresignedUrlUploadLargeFile(bucketname, filename string, sizeFile int64,
 	return
 }
 
-func CompleteMultipartUpload(bucketname, filename, uploadId string, listcompletedParts []*s3.CompletedPart) (string, error) {
-	sort.Slice(listcompletedParts, func(i, j int) bool {
-		return int(*listcompletedParts[i].PartNumber) < int(*listcompletedParts[j].PartNumber)
+func CompleteMultipartUpload(bucketname, filename, uploadId string, listCompletedParts []*s3.CompletedPart) (string, error) {
+	sort.Slice(listCompletedParts, func(i, j int) bool {
+		return int(*listCompletedParts[i].PartNumber) < int(*listCompletedParts[j].PartNumber)
 	})
 	svc := s3.New(infrastructure.GetAwsSession())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -96,7 +96,7 @@ func CompleteMultipartUpload(bucketname, filename, uploadId string, listcomplete
 		Key:      aws.String(filename),
 		UploadId: aws.String(uploadId),
 		MultipartUpload: &s3.CompletedMultipartUpload{
-			Parts: listcompletedParts,
+			Parts: listCompletedParts,
 		},
 	})
 	if err != nil {
