@@ -22,9 +22,10 @@ import (
 )
 
 const (
-	PART_SIZE       = 5_242_880 // 5_242_880 minimim
-	RETRIES         = 2
-	LARGE_FILE_SIZE = 20_000_000
+	PART_SIZE         = 5_242_880 // 5_242_880 minimim
+	RETRIES           = 2
+	LARGE_FILE_SIZE   = 20_000_000
+	MAX_DOWNLOAD_SIZE = 262_144
 )
 
 type mediaService struct {
@@ -61,19 +62,57 @@ func UploadMedia(c pb.MediaServiceClient, payload model.MediaPayload, byteData [
 }
 
 func DownloadMedia(c pb.MediaServiceClient, payload model.MediaPayload) (*model.MediaResopnse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	out, err := c.GetHeadFile(ctx, &pb.FileInput{
 		Bucket: payload.Bucket,
 		Key:    payload.Key,
 	})
+	log.Println("content-lengh:", out.ContentLength)
 	if err != nil {
 		return nil, err
 	}
-	if out.GetContentLength() < LARGE_FILE_SIZE {
-		return DownloadNormalFile(c, payload)
+	// if out.GetContentLength() < LARGE_FILE_SIZE {
+	// 	return DownloadNormalFile(c, payload)
+	// }
+	// return DownloadLargeFile(c, payload, out.GetContentLength())
+	return downloadMediaByRange(c, payload, out.GetContentLength())
+}
+
+func downloadMediaByRange(c pb.MediaServiceClient, payload model.MediaPayload, objectSize int64) (*model.MediaResopnse, error) {
+	response := &model.MediaResopnse{
+		FileName: payload.Key,
 	}
-	return DownloadLargeFile(c, payload)
+	for startRange := int64(0); startRange < objectSize; startRange += MAX_DOWNLOAD_SIZE {
+		var try int
+		for try <= RETRIES {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			out, err := c.GetObjectByRange(ctx, &pb.FilePartInput{
+				Bucket:     payload.Bucket,
+				Key:        payload.Key,
+				RangeStart: startRange,
+				RangeEnd:   startRange + MAX_DOWNLOAD_SIZE - 1,
+				PartSize:   MAX_DOWNLOAD_SIZE,
+			})
+			if err != nil {
+				// Max retries reached! Quitting
+				if try == RETRIES {
+					return nil, err
+				} else {
+					// Retrying
+					try++
+					continue
+				}
+			}
+			// =================================================================
+			// TODO: cache to redis .........
+			// =================================================================
+			response.ByteData = append(response.ByteData, out.GetData()...)
+			break
+		}
+	}
+	return response, nil
 }
 
 func DownloadNormalFile(c pb.MediaServiceClient, payload model.MediaPayload) (*model.MediaResopnse, error) {
@@ -110,12 +149,12 @@ func DownloadNormalFile(c pb.MediaServiceClient, payload model.MediaPayload) (*m
 	}, nil
 }
 
-func DownloadLargeFile(c pb.MediaServiceClient, payload model.MediaPayload) (*model.MediaResopnse, error) {
+func DownloadLargeFile(c pb.MediaServiceClient, payload model.MediaPayload, objectSize int64) (*model.MediaResopnse, error) {
 	out, err := c.GetPresignedUrlDownloadPartFile(context.TODO(), &pb.LargeFileInput{
-		Bucket:        "",
-		Key:           "",
-		ContentLength: 0,
-		PartSize:      0,
+		Bucket:        payload.Bucket,
+		Key:           payload.Key,
+		ContentLength: objectSize,
+		PartSize:      PART_SIZE,
 	})
 	if err != nil {
 		return nil, err

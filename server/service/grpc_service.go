@@ -6,6 +6,7 @@ import (
 	"demo-grpc/server/infrastructure"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"sort"
 	"time"
 
@@ -29,6 +30,22 @@ func (s *server) GetHeadFile(ctx context.Context, in *pb.FileInput) (*pb.FileHea
 	}
 	return &pb.FileHeader{
 		ContentLength: *out.ContentLength,
+	}, nil
+}
+
+func (s *server) GetObjectByRange(ctx context.Context, in *pb.FilePartInput) (*pb.FilePartObject, error) {
+	svc := s3.New(infrastructure.GetAwsSession())
+	result, err := svc.GetObjectWithContext(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(in.GetBucket()),
+		Key:    aws.String(in.GetKey()),
+		Range:  aws.String(fmt.Sprintf("bytes=%d-%d", in.GetRangeStart(), in.GetRangeEnd())),
+	})
+	if err != nil {
+		return nil, err
+	}
+	tmpData, _ := ioutil.ReadAll(result.Body)
+	return &pb.FilePartObject{
+		Data: tmpData,
 	}, nil
 }
 

@@ -2,6 +2,7 @@ package infrastructure
 
 import (
 	"os"
+	"path"
 )
 
 var (
@@ -17,7 +18,8 @@ var (
 )
 
 func loadEnvParameters() {
-	rootPath, _ = os.Getwd()
+	root, _ := os.Getwd()
+	rootPath = path.Join(root, "client")
 	appPort = "15001"
 
 	httpSwagger = "http://localhost:15001/api/v1/swagger/doc.json"

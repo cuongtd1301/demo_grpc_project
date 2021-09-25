@@ -19,6 +19,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type MediaServiceClient interface {
 	GetHeadFile(ctx context.Context, in *FileInput, opts ...grpc.CallOption) (*FileHeader, error)
+	GetObjectByRange(ctx context.Context, in *FilePartInput, opts ...grpc.CallOption) (*FilePartObject, error)
 	GetPresignedUrlDownloadFile(ctx context.Context, in *FileInput, opts ...grpc.CallOption) (*FileDownloadUrl, error)
 	GetPresignedUrlDownloadPartFile(ctx context.Context, in *LargeFileInput, opts ...grpc.CallOption) (*LargeFileResponse, error)
 	GetPresignedUrlUploadFile(ctx context.Context, in *FileInput, opts ...grpc.CallOption) (*FileUploadUrl, error)
@@ -38,6 +39,15 @@ func NewMediaServiceClient(cc grpc.ClientConnInterface) MediaServiceClient {
 func (c *mediaServiceClient) GetHeadFile(ctx context.Context, in *FileInput, opts ...grpc.CallOption) (*FileHeader, error) {
 	out := new(FileHeader)
 	err := c.cc.Invoke(ctx, "/proto.MediaService/GetHeadFile", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mediaServiceClient) GetObjectByRange(ctx context.Context, in *FilePartInput, opts ...grpc.CallOption) (*FilePartObject, error) {
+	out := new(FilePartObject)
+	err := c.cc.Invoke(ctx, "/proto.MediaService/GetObjectByRange", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +113,7 @@ func (c *mediaServiceClient) AbortMultipartUpload(ctx context.Context, in *Uploa
 // for forward compatibility
 type MediaServiceServer interface {
 	GetHeadFile(context.Context, *FileInput) (*FileHeader, error)
+	GetObjectByRange(context.Context, *FilePartInput) (*FilePartObject, error)
 	GetPresignedUrlDownloadFile(context.Context, *FileInput) (*FileDownloadUrl, error)
 	GetPresignedUrlDownloadPartFile(context.Context, *LargeFileInput) (*LargeFileResponse, error)
 	GetPresignedUrlUploadFile(context.Context, *FileInput) (*FileUploadUrl, error)
@@ -118,6 +129,9 @@ type UnimplementedMediaServiceServer struct {
 
 func (UnimplementedMediaServiceServer) GetHeadFile(context.Context, *FileInput) (*FileHeader, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetHeadFile not implemented")
+}
+func (UnimplementedMediaServiceServer) GetObjectByRange(context.Context, *FilePartInput) (*FilePartObject, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetObjectByRange not implemented")
 }
 func (UnimplementedMediaServiceServer) GetPresignedUrlDownloadFile(context.Context, *FileInput) (*FileDownloadUrl, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPresignedUrlDownloadFile not implemented")
@@ -164,6 +178,24 @@ func _MediaService_GetHeadFile_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MediaServiceServer).GetHeadFile(ctx, req.(*FileInput))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MediaService_GetObjectByRange_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FilePartInput)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MediaServiceServer).GetObjectByRange(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.MediaService/GetObjectByRange",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MediaServiceServer).GetObjectByRange(ctx, req.(*FilePartInput))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -286,6 +318,10 @@ var MediaService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetHeadFile",
 			Handler:    _MediaService_GetHeadFile_Handler,
+		},
+		{
+			MethodName: "GetObjectByRange",
+			Handler:    _MediaService_GetObjectByRange_Handler,
 		},
 		{
 			MethodName: "GetPresignedUrlDownloadFile",

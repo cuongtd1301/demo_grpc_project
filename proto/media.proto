@@ -6,6 +6,7 @@ package proto;
 
 service MediaService {
     rpc GetHeadFile(FileInput) returns (FileHeader) {};
+    rpc GetObjectByRange(FilePartInput) returns (FilePartObject) {};
     rpc GetPresignedUrlDownloadFile(FileInput) returns (FileDownloadUrl){};
     rpc GetPresignedUrlDownloadPartFile(LargeFileInput) returns (LargeFileResponse);
     rpc GetPresignedUrlUploadFile(FileInput) returns (FileUploadUrl){};
@@ -22,6 +23,18 @@ message FileInput {
 
 message FileHeader {
     int64 content_length = 1;
+}
+
+message FilePartInput {
+    string bucket = 1;
+    string key = 2;
+    int64 range_start = 3;
+    int64 range_end = 4;
+    int64 part_size = 5;
+}
+
+message FilePartObject {
+    bytes data = 1;
 }
 
 message FileDownloadUrl {

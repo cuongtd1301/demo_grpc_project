@@ -58,7 +58,6 @@ func (c *mediaController) ManageMedia(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tmp, err := c.mediaService.ManageMedia(data, byteFile, header)
-
 	if err != nil {
 		res = &model.Response{
 			Data:    nil,
